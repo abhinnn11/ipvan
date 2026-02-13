@@ -33,7 +33,7 @@ sed -i '/comp-lzo/d' "$SERVER"
 sed -i '/reneg-sec/d' "$SERVER"
 sed -i '/auth SHA256/d' "$SERVER"
 sed -i '/cipher /d' "$SERVER"
-
+sed -i 's#ca ca.ipvanish.com.crt#ca /config/ca.ipvanish.com.crt#g' "$SERVER"
 # remove daemon/logging options (break docker)
 sed -i '/daemon/d' "$SERVER"
 sed -i '/log /d' "$SERVER"
