@@ -31,10 +31,7 @@ RUN mkdir -p /config \
 RUN sed -i 's/Allow /#Allow /g' /etc/tinyproxy/tinyproxy.conf \
  && sed -i 's/#DisableViaHeader/DisableViaHeader/g' /etc/tinyproxy/tinyproxy.conf
 
-ENV COUNTRY=NL
-ENV USERNAME=""
-ENV PASSWORD=""
-ENV RANDOMIZE=true
+
 
 EXPOSE 8888
 
