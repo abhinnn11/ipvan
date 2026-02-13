@@ -12,7 +12,7 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # copy scripts
-COPY root/ /
+COPY root/ /app/
 
 # copy LOCAL ipvanish configs (instead of wget)
 COPY configs.zip /config/configs.zip
