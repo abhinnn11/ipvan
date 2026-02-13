@@ -1,6 +1,5 @@
 FROM alpine:3.20
 
-# basic tools
 RUN apk add --no-cache \
     openvpn \
     tinyproxy \
@@ -15,18 +14,22 @@ WORKDIR /app
 # copy scripts
 COPY root/ /
 
-# download ipvanish configs
+# copy LOCAL ipvanish configs (instead of wget)
+COPY configs.zip /config/configs.zip
+
+# extract configs
 RUN mkdir -p /config \
-    && wget -O /config/ipvanish.zip https://www.ipvanish.com/software/configs/configs.zip \
-    && unzip /config/ipvanish.zip -d /config \
+    && unzip /config/configs.zip -d /config \
     && chmod +x /app/connect.sh \
     && chmod +x /app/healthcheck.sh \
     && chmod +x /app/tls-verify.sh
 
-# tinyproxy setup
+# (old online download — disabled)
+# RUN wget https://www.ipvanish.com/software/configs/configs.zip -P config/
+
+# tinyproxy adjustments
 RUN sed -i 's/Allow /#Allow /g' /etc/tinyproxy/tinyproxy.conf \
- && sed -i 's/#DisableViaHeader/DisableViaHeader/g' /etc/tinyproxy/tinyproxy.conf \
- && sed -i 's/Port 8888/Port 8888/g' /etc/tinyproxy/tinyproxy.conf
+ && sed -i 's/#DisableViaHeader/DisableViaHeader/g' /etc/tinyproxy/tinyproxy.conf
 
 ENV COUNTRY=NL
 ENV USERNAME=""
