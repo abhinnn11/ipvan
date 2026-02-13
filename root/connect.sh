@@ -26,7 +26,7 @@ echo "script-security 2" >> "$SERVER"
 echo "redirect-gateway def1" >> "$SERVER"
 
 # enable routing
-echo 1 > /proc/sys/net/ipv4/ip_forward
+sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
 
 # start tinyproxy
 tinyproxy
