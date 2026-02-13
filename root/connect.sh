@@ -1,56 +1,93 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 echo "Starting IPVanish..."
 
+########################
 # create auth file
+########################
 cat <<EOF > /config/auth.txt
 $USERNAME
 $PASSWORD
 EOF
-
 chmod 600 /config/auth.txt
 
+########################
 # choose server
+########################
 if [ "$RANDOMIZE" = "true" ]; then
-    SERVER=$(ls /config/*.ovpn | grep "$COUNTRY" | shuf -n1)
+    SERVER=$(find /config -name "*.ovpn" | grep "$COUNTRY" | shuf -n1)
 else
-    SERVER=$(ls /config/*.ovpn | grep "$COUNTRY" | head -n1)
+    SERVER=$(find /config -name "*.ovpn" | grep "$COUNTRY" | head -n1)
 fi
 
 echo "Using server: $SERVER"
-# ---- Fix old IPVanish configs for OpenVPN 2.6 ----
 
-# remove deprecated directives
+########################
+# sanitize IPVanish config for OpenVPN 2.6
+########################
+
+# remove deprecated/unsafe options
 sed -i '/keysize/d' "$SERVER"
 sed -i '/comp-lzo/d' "$SERVER"
 sed -i '/reneg-sec/d' "$SERVER"
-
-# replace cipher (old BF-CBC removed from OpenVPN 2.6 default)
-sed -i 's/cipher AES-256-CBC/data-ciphers AES-256-GCM:AES-128-GCM:AES-256-CBC/g' "$SERVER"
 sed -i '/auth SHA256/d' "$SERVER"
+sed -i '/cipher /d' "$SERVER"
 
-# ensure auth file
-sed -i 's/auth-user-pass/auth-user-pass \/config\/auth.txt/g' "$SERVER"
+# remove daemon/logging options (break docker)
+sed -i '/daemon/d' "$SERVER"
+sed -i '/log /d' "$SERVER"
+sed -i '/log-append/d' "$SERVER"
 
-# ensure proper routing
-grep -q "redirect-gateway" "$SERVER" || echo "redirect-gateway def1" >> "$SERVER"
+# VERY IMPORTANT: remove ALL auth-user-pass lines
+sed -i '/auth-user-pass/d' "$SERVER"
 
-# allow modern negotiation
-echo "allow-compression no" >> "$SERVER"
+# add correct auth file
+echo "auth-user-pass /config/auth.txt" >> "$SERVER"
+
+# modern cipher negotiation
+echo "data-ciphers AES-256-GCM:AES-128-GCM:AES-256-CBC" >> "$SERVER"
+echo "data-ciphers-fallback AES-256-CBC" >> "$SERVER"
+
+# routing
+echo "redirect-gateway def1" >> "$SERVER"
 echo "auth-nocache" >> "$SERVER"
 echo "verb 3" >> "$SERVER"
 
-# fix ovpn options
-sed -i 's/auth-user-pass/auth-user-pass \/config\/auth.txt/g' "$SERVER"
-echo "script-security 2" >> "$SERVER"
-echo "redirect-gateway def1" >> "$SERVER"
+########################
+# start VPN FIRST
+########################
+openvpn --config "$SERVER" &
+VPN_PID=$!
 
-# enable routing
-sysctl -w net.ipv4.ip_forward=1 >/dev/null 2>&1 || true
+echo "Waiting for tunnel..."
 
-# start tinyproxy
+# wait for tun0
+for i in {1..30}; do
+    if ip a show tun0 >/dev/null 2>&1; then
+        echo "VPN tunnel established"
+        break
+    fi
+    sleep 1
+done
+
+if ! ip a show tun0 >/dev/null 2>&1; then
+    echo "VPN failed to start"
+    exit 1
+fi
+
+########################
+# NAT (this makes proxy actually use VPN)
+########################
+iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE
+
+########################
+# start tinyproxy AFTER vpn
+########################
+echo "Starting tinyproxy..."
 tinyproxy
 
-# start vpn
-exec openvpn --config "$SERVER" --verb 3
+########################
+# keep container alive
+########################
+wait $VPN_PID
